@@ -1,0 +1,135 @@
+#include <QCoreApplication>
+#include <QDebug>
+#include <QFile>
+#include <QSslCertificate>
+#include <QSslConfiguration>
+#include <QSslKey>
+
+/**
+ * @brief project header files
+ *
+ */
+
+#include "server.h"
+#include "logger.h"
+#include "config_parser.h"
+
+Server::~Server() = default;
+
+Server::Server(QObject *parent) : QObject(parent), m_sslServer(std::make_unique<QSslServer>()) {}
+
+bool Server::initialize()
+{
+    // Load configuration (using your config parser, for example)
+    QVariantMap config = ConfigParser::loadConfig(ConfigParser::getConfigPath());
+    if (config.isEmpty())
+    {
+        DSA_LOG(Logger::CRITICAL, "Failed to load configuration.");
+        return false;
+    }
+
+    QString host = ConfigParser::getString(config, "db_host");
+    QString dbName = ConfigParser::getString(config, "db_name");
+    QString user = ConfigParser::getString(config, "db_user");
+    QString password = ConfigParser::getString(config, "db_password");
+    int port = ConfigParser::getInt(config, "db_port");
+
+    // Try to connect to the database
+    DBManager &dbManager = DBManager::getInstance();
+    if (!dbManager.connect(host, dbName, user, password, port))
+    {
+        DSA_LOG(Logger::CRITICAL, "Database connection failed!");
+        return false;
+    }
+
+    // Proceed with further initialization (repositories, controllers, etc.)
+    auto userRepository = std::make_shared<UserRepository>(dbManager);
+    auto userService = std::make_shared<UserService>(userRepository);
+
+    const QString jwtSecretKey("HelloWorldkjhk");
+    auto authService = std::make_shared<AuthService>(jwtSecretKey);
+    auto userController = std::make_shared<UserController>(userService, authService);
+
+    m_apiController = new ApiController(userController, this);
+    return true;
+}
+
+bool Server::start(quint16 port)
+{
+    if (!configureSsl())
+    {
+        return false;
+    }
+
+    setupRoutes();
+
+    if (!m_sslServer->listen(QHostAddress::AnyIPv4, port) || !m_httpServer.bind(m_sslServer.get()))
+    {
+        DSA_LOG(Logger::ERROR, "Server failed to listen on port: " + port);
+        return false;
+    }
+
+    return true;
+}
+
+void Server::setupRoutes()
+{
+    DSA_LOG(Logger::INFO, "Setting up routes...");
+    // Add a catch-all route for preflight OPTIONS requests
+    m_httpServer.route("^/.*$", QHttpServerRequest::Method::Options,
+                       [](const QHttpServerRequest &request, QHttpServerResponder &responder)
+                       {
+                           DSA_LOG(Logger::INFO, "Handling OPTIONS request...");
+                           QHttpHeaders headers;
+
+                           auto originList = request.headers().values(QHttpHeaders::WellKnownHeader::Origin);
+                           // Check that the origin is one you allow (here we simply echo it if present)
+                           if (originList.isEmpty())
+                           {
+                               // Optionally set a fallback (but ideally the request should always send an Origin
+                               // header)
+                               headers.append("Access-Control-Allow-Origin", "https://localhost:8080");
+                           }
+                           else
+                           {
+                               // Optionally set a fallback (but ideally the request should always send an Origin
+                               // header)
+                               QString origin = QString::fromUtf8(originList.first());
+                               DSA_LOG(Logger::INFO, "Origin: " + origin);
+                               headers.append("Access-Control-Allow-Origin", origin);
+                           }
+                           headers.append("Access-Control-Allow-Credentials", "true");
+                           headers.append("Access-Control-Allow-Methods", "GET, POST, OPTIONS, DELETE");
+                           headers.append("Access-Control-Allow-Headers", "Content-Type, Authorization");
+                           responder.write(headers, QHttpServerResponder::StatusCode::Ok);
+                       });
+    m_apiController->registerRoutes(m_httpServer);
+}
+
+bool Server::configureSsl()
+{
+    DSA_LOG(Logger::INFO, "Configuring SSL...");
+    // Load SSL certificate and key
+    QSslConfiguration sslConfig = QSslConfiguration::defaultConfiguration();
+    const auto sslCertificateChain = QSslCertificate::fromPath("certs/server.crt");
+    if (sslCertificateChain.isEmpty())
+    {
+        DSA_LOG(Logger::ERROR, "Couldn't retrieve SSL certificate from file.");
+        return false;
+    }
+
+    QFile privateKeyFile("certs/server.key");
+    if (!privateKeyFile.open(QIODevice::ReadOnly))
+    {
+        DSA_LOG(Logger::ERROR, "Couldn't open file for reading: " + privateKeyFile.errorString());
+        return false;
+    }
+
+    sslConfig.setLocalCertificate(sslCertificateChain.front());
+    sslConfig.setPrivateKey(QSslKey(&privateKeyFile, QSsl::Rsa));
+    privateKeyFile.close();
+
+    m_sslServer->setSslConfiguration(sslConfig);
+
+    return true;
+}
