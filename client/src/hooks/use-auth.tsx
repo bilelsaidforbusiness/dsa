@@ -7,14 +7,14 @@ import {
 import { getQueryFn, apiRequest, queryClient } from "../lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
-// Types based on your Qt backend response structure
+// Types based on our schema
 type User = {
   id: number;
   username: string;
   fullName: string;
   email: string;
   role: "student" | "instructor";
-  licenseNumber?: string;
+  licenseNumber: string | null;
 };
 
 type AuthContextType = {
@@ -48,18 +48,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     data: user,
     error,
     isLoading,
-  } = useQuery<User | undefined, Error>({
-    queryKey: ["/getUserById"],
+  } = useQuery<User | null, Error>({
+    queryKey: ["/api/user"],
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: LoginData) => {
-      const res = await apiRequest("POST", "/login", credentials);
-      return await res.json();
+      const res = await apiRequest("POST", "/api/login", credentials);
+      return res.json();
     },
     onSuccess: (user: User) => {
-      queryClient.setQueryData(["/getUserById"], user);
+      queryClient.setQueryData(["/api/user"], user);
       toast({
         title: "Success",
         description: "Logged in successfully",
@@ -76,11 +76,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const registerMutation = useMutation({
     mutationFn: async (data: RegisterData) => {
-      const res = await apiRequest("POST", "/registerUser", data);
-      return await res.json();
+      const res = await apiRequest("POST", "/api/register", data);
+      return res.json();
     },
     onSuccess: (user: User) => {
-      queryClient.setQueryData(["/getUserById"], user);
+      queryClient.setQueryData(["/api/user"], user);
       toast({
         title: "Success", 
         description: "Account created successfully",
@@ -97,10 +97,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest("POST", "/logout");
+      await apiRequest("POST", "/api/logout");
     },
     onSuccess: () => {
-      queryClient.setQueryData(["/getUserById"], null);
+      queryClient.setQueryData(["/api/user"], null);
       toast({
         title: "Success",
         description: "Logged out successfully",
