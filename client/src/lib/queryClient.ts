@@ -7,7 +7,8 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
-const API_BASE_URL = "https://localhost:8080"; // Qt server port from the code
+// Update the base URL to match your Qt HTTPS backend
+const API_BASE_URL = "https://localhost:8080";
 
 export async function apiRequest(
   method: string,

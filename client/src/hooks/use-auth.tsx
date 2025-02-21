@@ -4,29 +4,51 @@ import {
   useMutation,
   UseMutationResult,
 } from "@tanstack/react-query";
-import { User as SelectUser, InsertUser } from "@shared/schema";
 import { getQueryFn, apiRequest, queryClient } from "../lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
-type AuthContextType = {
-  user: SelectUser | null;
-  isLoading: boolean;
-  error: Error | null;
-  loginMutation: UseMutationResult<SelectUser, Error, LoginData>;
-  logoutMutation: UseMutationResult<void, Error, void>;
-  registerMutation: UseMutationResult<SelectUser, Error, InsertUser>;
+// Types based on your Qt backend response structure
+type User = {
+  id: number;
+  username: string;
+  fullName: string;
+  email: string;
+  role: "student" | "instructor";
+  licenseNumber?: string;
 };
 
-type LoginData = Pick<InsertUser, "username" | "password">;
+type AuthContextType = {
+  user: User | null;
+  isLoading: boolean;
+  error: Error | null;
+  loginMutation: UseMutationResult<User, Error, LoginData>;
+  logoutMutation: UseMutationResult<void, Error, void>;
+  registerMutation: UseMutationResult<User, Error, RegisterData>;
+};
+
+type LoginData = {
+  username: string;
+  password: string;
+};
+
+type RegisterData = {
+  username: string;
+  password: string;
+  fullName: string;
+  email: string;
+  role: "student" | "instructor";
+  licenseNumber?: string;
+};
 
 export const AuthContext = createContext<AuthContextType | null>(null);
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
   const {
     data: user,
     error,
     isLoading,
-  } = useQuery<SelectUser | undefined, Error>({
+  } = useQuery<User | undefined, Error>({
     queryKey: ["/getUserById"],
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
@@ -36,8 +58,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await apiRequest("POST", "/login", credentials);
       return await res.json();
     },
-    onSuccess: (user: SelectUser) => {
+    onSuccess: (user: User) => {
       queryClient.setQueryData(["/getUserById"], user);
+      toast({
+        title: "Success",
+        description: "Logged in successfully",
+      });
     },
     onError: (error: Error) => {
       toast({
@@ -49,12 +75,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const registerMutation = useMutation({
-    mutationFn: async (credentials: InsertUser) => {
-      const res = await apiRequest("POST", "/registerUser", credentials);
+    mutationFn: async (data: RegisterData) => {
+      const res = await apiRequest("POST", "/registerUser", data);
       return await res.json();
     },
-    onSuccess: (user: SelectUser) => {
+    onSuccess: (user: User) => {
       queryClient.setQueryData(["/getUserById"], user);
+      toast({
+        title: "Success", 
+        description: "Account created successfully",
+      });
     },
     onError: (error: Error) => {
       toast({
@@ -71,6 +101,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     onSuccess: () => {
       queryClient.setQueryData(["/getUserById"], null);
+      toast({
+        title: "Success",
+        description: "Logged out successfully",
+      });
     },
     onError: (error: Error) => {
       toast({

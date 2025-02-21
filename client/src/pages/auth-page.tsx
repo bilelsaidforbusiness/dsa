@@ -1,6 +1,6 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertUserSchema, InsertUser } from "@shared/schema";
+import { z } from "zod";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +10,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useLocation } from "wouter";
 import { GraduationCap } from "lucide-react";
+
+// Extend validation schema to match your Qt backend requirements
+const registerSchema = z.object({
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  fullName: z.string().min(1, "Full name is required"),
+  email: z.string().email("Invalid email address"),
+  role: z.enum(["student", "instructor"]),
+  licenseNumber: z.string().optional()
+});
 
 export default function AuthPage() {
   const { user, loginMutation, registerMutation } = useAuth();
@@ -28,11 +38,12 @@ export default function AuthPage() {
   });
 
   const registerForm = useForm({
-    resolver: zodResolver(insertUserSchema),
+    resolver: zodResolver(registerSchema),
     defaultValues: {
       username: "",
       password: "",
       fullName: "",
+      email: "",
       role: "student" as const,
       licenseNumber: "",
     },
@@ -90,7 +101,7 @@ export default function AuthPage() {
                         className="w-full"
                         disabled={loginMutation.isPending}
                       >
-                        Login
+                        {loginMutation.isPending ? "Logging in..." : "Login"}
                       </Button>
                     </div>
                   </form>
@@ -109,6 +120,19 @@ export default function AuthPage() {
                             <FormLabel>Username</FormLabel>
                             <FormControl>
                               <Input {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={registerForm.control}
+                        name="email"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Email</FormLabel>
+                            <FormControl>
+                              <Input type="email" {...field} />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -182,7 +206,7 @@ export default function AuthPage() {
                         className="w-full"
                         disabled={registerMutation.isPending}
                       >
-                        Register
+                        {registerMutation.isPending ? "Creating account..." : "Register"}
                       </Button>
                     </div>
                   </form>
