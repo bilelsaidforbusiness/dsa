@@ -1,0 +1,48 @@
+#include <QHttpServer>
+#include <QHttpServerRequest>
+#include <QHttpServerResponder>
+
+#include <QJsonDocument>
+#include <QTextStream>
+#include <QJsonArray>
+
+#include "api_controller.h"
+#include "logger.h"
+
+ApiController::ApiController(std::shared_ptr<UserController> userController, QObject *parent)
+    : QObject(parent), m_userController(std::move(userController))
+{
+    if (!m_userController)
+    {
+        throw std::invalid_argument("UserController cannot be null");
+    }
+}
+
+void ApiController::registerRoutes(QHttpServer &server)
+{
+    DSA_LOG(Logger::INFO, "Registering routes...");
+    server.route("/registerUser", QHttpServerRequest::Method::Post,
+                 [this](const QHttpServerRequest &request, QHttpServerResponder &responder)
+                 {m_userController->handleRegisterUser(request, responder); });
+
+    server.route("/login", QHttpServerRequest::Method::Post,
+                 [this](const QHttpServerRequest &request, QHttpServerResponder &responder)
+                 { m_userController->handleLogin(request, responder); });
+    server.route("/logout", QHttpServerRequest::Method::Post,
+                 [this](const QHttpServerRequest &request, QHttpServerResponder &responder)
+                 { m_userController->handleLogout(request, responder); });
+    server.route("/getUserById", QHttpServerRequest::Method::Get,
+                 [this](const QHttpServerRequest &request, QHttpServerResponder &responder)
+                 { m_userController->handleGetUserById(request, responder); });
+
+    server.route("/deleteUserById", QHttpServerRequest::Method::Delete,
+                 [this](const QHttpServerRequest &request, QHttpServerResponder &responder)
+                 { m_userController->handleDeleteUserById(request, responder); });
+
+    server.route("/users", QHttpServerRequest::Method::Get,
+                 [this](const QHttpServerRequest &request, QHttpServerResponder &responder)
+                 { m_userController->handleGetUsersList(request, responder); });
+    server.route("/deleteAllUsers", QHttpServerRequest::Method::Delete,
+                 [this](const QHttpServerRequest &request, QHttpServerResponder &responder)
+                 { m_userController->handleDeleteAllUsers(request, responder); });
+}
